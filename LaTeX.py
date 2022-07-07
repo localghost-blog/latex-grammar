@@ -5,17 +5,20 @@ from src.LaTeXParser import LaTeXParser
 from src.LaTeXParserVisitor import LaTeXParserVisitor
 
 class Visitor(LaTeXParserVisitor):
+	def visitComment(self, ctx: LaTeXParser.CommentContext):
+		print('comment	:', ctx.getText())
+		return super().visitComment(ctx)
+	def visitVerbatim(self, ctx: LaTeXParser.VerbatimContext):
+		print('verbatim:', ctx.getText())
+		return super().visitVerbatim(ctx)
 	def visitMath(self, ctx: LaTeXParser.MathContext):
-		print('math: ', ctx.getText())
+		print('math	:', ctx.getText())
 		return super().visitMath(ctx)
 	def visitArgument(self, ctx: LaTeXParser.ArgumentContext):
-		print('argument: ', ctx.getText())
+		# print('argument:', ctx.getText())
 		return super().visitArgument(ctx)
-	def visitTextmacro(self, ctx: LaTeXParser.TextmacroContext):
-		print('textmacro: ', ctx.getText())
-		return super().visitTextmacro(ctx)
 	def visitMacro(self, ctx: LaTeXParser.MacroContext):
-		print('macro: ', ctx.getText())
+		print('macro	:', ctx.getText())
 		return super().visitMacro(ctx)
 	
 
@@ -29,9 +32,10 @@ def output(text):
 	tree = parser.content()
 
 	visitor = Visitor()
+	# visitor = LaTeXParserVisitor()
 	visitor.visit(tree)
 
 if __name__ == '__main__':
-	with open('sample.tex', 'r') as f:
+	with open('tex/sample.tex', 'r') as f:
 		text = f.read()
 		output(text)

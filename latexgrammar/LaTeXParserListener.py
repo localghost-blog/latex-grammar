@@ -17,15 +17,6 @@ class LaTeXParserListener(ParseTreeListener):
         pass
 
 
-    # Enter a parse tree produced by LaTeXParser#escape.
-    def enterEscape(self, ctx:LaTeXParser.EscapeContext):
-        pass
-
-    # Exit a parse tree produced by LaTeXParser#escape.
-    def exitEscape(self, ctx:LaTeXParser.EscapeContext):
-        pass
-
-
     # Enter a parse tree produced by LaTeXParser#verbatim.
     def enterVerbatim(self, ctx:LaTeXParser.VerbatimContext):
         pass
@@ -41,15 +32,6 @@ class LaTeXParserListener(ParseTreeListener):
 
     # Exit a parse tree produced by LaTeXParser#math.
     def exitMath(self, ctx:LaTeXParser.MathContext):
-        pass
-
-
-    # Enter a parse tree produced by LaTeXParser#textmacro.
-    def enterTextmacro(self, ctx:LaTeXParser.TextmacroContext):
-        pass
-
-    # Exit a parse tree produced by LaTeXParser#textmacro.
-    def exitTextmacro(self, ctx:LaTeXParser.TextmacroContext):
         pass
 
 

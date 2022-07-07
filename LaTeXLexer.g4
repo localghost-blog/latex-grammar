@@ -2,161 +2,164 @@ lexer grammar LaTeXLexer;
 
 options {language = Python3;}
 
-@members
-{
+tokens {STR, SPACE, MACRO, COMMENT, ENV}
+
+
+
+@members {
 def next_char(self) -> int:
 	for pos in range(self._input._index, self._input._size):
 		if not chr(self._input.data[pos]).isspace():
 			return self._input.data[pos]
 	return -1
+
+def last_char(self) -> int:
+	return self._input.LA(-1)
 }
 
-COMMENT				: '%' .*? (EOF | NEWLINE);
-ESCAPE				: '\\' ('&' | '%' | '$' | '#' | '_' | '{' | '}' | '~' | '^');
-SPECIALMACRO		: '\\' ('!' | ' ' | ',' | ':' | ';' | '\\');
-NEWLINE				: '\n' | '\r' | '\r\n' | '\f';
-SPACE				: (' ' | '\t' | '~')+;
-VERB				: '\\verb|' .*? '|';
-DISPLAYVERB			: '\\begin{verbatim}' .*? '\\end{verbatim}' -> type(VERB);
-MATH_BEGIN			: ('$$' | '\\[' | '\\begin{displaymath}' | '\\begin{equation*}') 
-{
+NEWLINE			: BLANK* EOL (BLANK* EOL)+ BLANK*;
+SPACE			: BLANK+ | (BLANK* EOL BLANK*) {self._input.LA(1) not in [10, 13]}?;
+COMMENT			: '%' .*? (EOF | (EOL BLANK*));
+ESCAPE			: '\\' ('#' | '$' | '%' | '&' | '_' | '{' | '}') -> type(MACRO);
+SPACEMACRO		: '\\' ('!' | ',' | ':' | ';' | ' ') -> type(MACRO);
+NEWLINEMACRO	: '\\\\' -> type(MACRO);
+HYPHEN			: '-'+;
+STR				: (CHAR | '/')+ ('/' | '_' | HYPHEN | DIGIT | CHAR)*;
+NUMBER			: DIGIT+ ('.' DIGIT+)?;
+PUNC			: '.' | '?' | '!' | ',' | ':' | ';' | '~' | '`' | '\'' | '"' | '(' | ')' | '*' | '=' | '|' | '&';
+VERB_BEGIN: '\\verb' '*'? ~('a'..'z' | 'A'..'Z' | ' ' | '\t' | '\f' | '\r' | '\n' | '*') {
+	self.stack.append(self._input._index + self._input.strdata[self._input._index:].find(self.text[-1]))
+	self.pushMode(LaTeXLexer.modeNames.index('VERBATIM'))
+};
+DISPLAYVERB_BEGIN: '\\begin{verbatim' '*'? '}' {
+	self.stack.append(self._input._index + self._input.strdata[self._input._index:].find('\\end{' + self.text[7:-1] + '}'))
+	self.pushMode(LaTeXLexer.modeNames.index('VERBATIM'))
+} -> type(VERB_BEGIN);
+MATH_BEGIN		: ('$$' | '\\[' | '\\begin{displaymath}' | '\\begin{equation*}') {
 	self.stack.append('displaymath')
 } -> pushMode(MATH);
-INLINEMATH_BEGIN	: ('$' | '\\(' | '\\begin{math}') 
-{
+INLINEMATH_BEGIN: ('$' | '\\(' | '\\begin{math}') {
 	self.stack.append('inlinemath')
 } -> pushMode(MATH), type(MATH_BEGIN);
-EQUATION_BEGIN	: '\\begin{equation}'
-{
+EQUATION_BEGIN	: '\\begin{equation}' {
 	self.stack.append('equation')
 } -> pushMode(MATH), type(MATH_BEGIN);
-ENV_BEGIN			: '\\begin{' WORD '}'
-{
+ENV_BEGIN		: '\\begin{' ALPHA+ '*'? '}' {
 	self.stack.append(self.text[7:-1])
 	if self.next_char() in [91, 123]:
 		self.pushMode(LaTeXLexer.modeNames.index('MATCHARG'))
 };
-ENV_END				: '\\end{' WORD '}'
-{
+ENV_END			: '\\end{' ALPHA+ '*'? '}' {
 	env = self.stack.pop()
 	assert self.text[5: -1] == env, 'Environment mismatch: {} != {}'.format(self.text[5: -1], env)
 };
-TEXTMACRO			: ('\\text' ('a'..'z' | 'A'..'Z')*)
-{
+URLMACRO		: '\\' ('url' | 'href') SPACE? '{' ~('}')* '}' -> type(MACRO);
+MACRO			: '\\' ALPHA+ '*'? SPACE? {
 	if self.next_char() in [91, 123]:
 		self.pushMode(LaTeXLexer.modeNames.index('MATCHARG'))
 };
-MACRO				: '\\' ('a'..'z' | 'A'..'Z')+ '*'?
-{
-	if self.next_char() in [91, 123]:
-		self.pushMode(LaTeXLexer.modeNames.index('MATCHARG'))
-};
-WORD				: ('a'..'z' | 'A'..'Z')+ ('a'..'z' | 'A'..'Z' | '0'..'9' | '-' | '/' | '_')*;
-NUMBER				: ('0'..'9')+;
-TEXTSTOP			: '.' | ',' | '!' | '?' | ':' | ';' | ')' | ']' | '\'';
-TEXTCONTINUE		: '(' | '[' | '`';
-TEXTSPLIT			: '&' | '|';
-HYPHEN				: '-';
-EQUAL				: '=';
-PUNCTUATION			: '*';
+
+mode VERBATIM;
+
+VERB_CHAR		: . { self._input.index <= self.stack[-1] }?;
+VERB_END		: '\\end{verbatim}' {
+	self.stack.pop()	
+} -> popMode;
+VERB_STAR_END	: '\\end{verbatim*}' {
+	self.stack.pop()	
+} -> popMode, type(VERB_END);
+INLINEVERB_END	: . {
+	self.stack.pop()	
+} -> popMode, type(VERB_END);
 
 mode MATCHARG;
 
-ARG_PRESPACE: SPACE -> type(SPACE);
-ARG_BEGIN: ('{' | '[')
-{ 
+ARG_PRESPACE: SPACE -> skip;
+ARG_BEGIN: ('{' | '[') { 
 	self.stack.append(self.text)	
 } -> pushMode(ARG);
 
 mode ARG;
 
-ARG_END			: ('}' | ']') 
-{ord(self.text) == ord(self.stack[-1]) + 2}?
-{
+ARG_END			: ('}' | ']') {ord(self.text) == ord(self.stack[-1]) + 2}? {
 	self.stack.pop()
 	self.popMode()
 	self.popMode()
 	if self.next_char() in [91, 123]:
 		self.pushMode(LaTeXLexer.modeNames.index('MATCHARG'))
 };
-ARG_MACRO		: MACRO
-{
+ARG_SPACE		: SPACE {self._input.LA(1) not in [10, 13]}? -> type(SPACE);
+ARG_COMMENT		: COMMENT -> type(COMMENT);
+ARG_ESCAPE		: ESCAPE -> type(MACRO);
+ARG_SPACEMACRO	: SPACEMACRO -> type(MACRO);
+ARG_NEWLINEMACRO: NEWLINEMACRO -> skip;
+ARG_HYPHEN		: HYPHEN -> type(HYPHEN);
+ARG_STR			: STR -> type(STR);
+ARG_NUMBER		: NUMBER -> type(NUMBER);
+ARG_PUNC		: PUNC -> type(PUNC);
+ARG_MATH_BEGIN	: MATH_BEGIN {
+	self.stack.append('displaymath')
+} -> pushMode(MATH), type(MATH_BEGIN);
+ARG_INLINEMATH_BEGIN: INLINEMATH_BEGIN {
+	self.stack.append('inlinemath')
+} -> pushMode(MATH), type(MATH_BEGIN);
+ARG_MACRO		: MACRO {
 	if self.next_char() in [91, 123]:
 		self.pushMode(LaTeXLexer.modeNames.index('MATCHARG'))
 } -> type(MACRO);
-ARG_COMMENT		: COMMENT -> type(COMMENT);
-ARG_ESCAPE		: ESCAPE -> type(ESCAPE);
-ARG_SPECIALMACRO: SPECIALMACRO -> type(SPECIALMACRO);
-ARG_NEWLINE		: NEWLINE -> type(NEWLINE);
-ARG_SPACE		: SPACE -> type(SPACE);
-ARG_VERB		: VERB -> type(VERB);
-ARG_TEXTMACRO	: TEXTMACRO 
-{
-	if self.next_char() in [91, 123]:
-		self.pushMode(LaTeXLexer.modeNames.index('MATCHARG'))
-} -> type(TEXTMACRO);
-ARG_INLINEMATH_BEGIN: ('$' | '\\(')
-{
-	self.stack.append('inlinemath')
-} -> type(MATH_BEGIN), pushMode(MATH);
-ARG_WORD			: WORD -> type(WORD);
-ARG_NUMBER		: NUMBER -> type(NUMBER);
-ARG_TEXTSTOP	: TEXTSTOP -> type(TEXTSTOP);
-ARG_TEXTCONTINUE: TEXTCONTINUE -> type(TEXTCONTINUE);
-ARG_TEXTSPLIT	: TEXTSPLIT -> type(TEXTSPLIT);
-ARG_HYPHEN		: HYPHEN -> type(HYPHEN);
-ARG_EQUAL		: EQUAL -> type(EQUAL);
-ARG_PUNCTUATION	: PUNCTUATION -> type(PUNCTUATION);
 
 mode MATH;
 
-MATH_END				: ('$$' | '\\]' | '\\end{displaymath}' | '\\end{equation*}') 
-{
+MATH_END				: ('$$' | '\\]' | '\\end{displaymath}' | '\\end{equation*}') {
 	env = self.stack.pop()
 	assert env == 'displaymath', 'Environment mismatch: {} != {}'.format('displaymath', env)
 } -> popMode;
-INLINEMATH_END			: ('$' | '\\)' | '\\end{math}')
-{
+INLINEMATH_END			: ('$' | '\\)' | '\\end{math}') {
 	env = self.stack.pop()
 	assert env == 'inlinemath', 'Environment mismatch: {} != {}'.format('inlinemath', env)
 } -> popMode, type(MATH_END);
-EQUATION_END			: '\\end{equation}'
-{
+EQUATION_END			: '\\end{equation}' {
 	env = self.stack.pop()
 	assert env == 'equation', 'Environment mismatch: {} != {}'.format('equation', env)
 } -> popMode, type(MATH_END);
+MATH_NEWLINE			: NEWLINE -> skip;
+MATH_SPACE				: SPACE -> skip;
 MATH_COMMENT			: COMMENT -> type(COMMENT);
-MATH_ESCAPE				: '\\' ('&' | '%' | '$' | '#' | '_' | '~' | '^') -> type(ESCAPE);
-MATH_SPECIALMACRO		: '\\' ('!' | ' ' | ',' | ':' | ';' | '\\' | '|') -> type(SPECIALMACRO);
-MATH_NEWLINE			: NEWLINE -> type(NEWLINE);
-MATH_SPACE				: SPACE -> type(SPACE);
-MATH_ENV_BEGIN			: '\\begin{' WORD '}'
-{
+MATH_ESCAPE				: ESCAPE -> type(MACRO);
+MATH_SPACEMACRO			: SPACEMACRO -> type(MACRO);
+MATH_NEWLINEMACRO		: NEWLINEMACRO -> type(MACRO);
+MATH_INLINEVERB_BEGIN	: VERB_BEGIN -> type(VERB_BEGIN);
+MATH_ENV_BEGIN			: '\\begin{' ALPHA+ '*'? '}' {
 	self.stack.append(self.text[7:-1])
 	if self.next_char() in [91, 123]:
 		self.pushMode(LaTeXLexer.modeNames.index('MATCHARG'))
 };
-MATH_ENV_END			: '\\end{' WORD '}'
-{
+MATH_ENV_END			: '\\end{' ALPHA+ '*'? '}' {
 	env = self.stack.pop()
 	assert self.text[5: -1] == env, 'Environment mismatch: {} != {}'.format(self.text[5: -1], env)
 };
-MATH_TEXTMACRO			: TEXTMACRO
-{
+MATH_TEXTMACRO			: '\\' (('\\text' (| 'bf' | 'it' | 'sc')) | 'label' | 'mbox') {not chr(self._input.LA(1)).isalpha()}? SPACE? {
 	if self.next_char() in [91, 123]:
 		self.pushMode(LaTeXLexer.modeNames.index('MATCHARG'))
-} -> type(TEXTMACRO);
-MATH_LEFT				: '\\left' ('(' | '[' | '\\{' | '|' | '.');
-MATH_RIGHT				: '\\right' (')' | ']' | '\\}' | '|' | '.');
-MATH_MACRO				: '\\' ('a'..'z' | 'A'..'Z')+;
-MATH_VARIABLE			: ('a'..'z' | 'A'..'Z');
+} -> type(MACRO);
+MATH_LEFT				: '\\left' ('(' | '[' | '\\{' | '|' | '\\|' | '.');
+MATH_RIGHT				: '\\right' (')' | ']' | '\\}' | '|' | '\\|' | '.');
+MATH_MACRO				: '\\' ALPHA+ '*'?;
+MATH_VARIABLE			: ALPHA | DIGIT;
 MATH_SCRIPT				: '_' | '^';
-MATH_BINARY_OPERATOR	: '+' | '-' | '*' | '/' | '=' | ':' | '>' | '<' | '|';
+MATH_BINARY_OPERATOR	: '+' | '-' | '*' | '/' | '=' | '>' | '<' | '|';
 MATH_UNARY_OPERATOR		: '!';
-MATHSTOP				: ('.' | ',') -> type(TEXTSTOP);
 MATH_ARG_BEGIN			: '{';
 MATH_ARG_END			: '}';
 MATH_SUBEXPR_BEGIN		: '(' | '[' | '\\{';
 MATH_SUBEXPR_END		: ')' | ']' | '\\}';
 MATH_AMPERSAND			: '&';
-MATH_NUMBER				: NUMBER -> type(NUMBER);
+MATH_PUNC				: (PUNC | '\\|') -> type(PUNC);
+// MATH_NUMBER				: NUMBER -> type(NUMBER);
+
+fragment EOL	: '\r' ? '\n';
+fragment BLANK	: ' ' | '\t' | '\f';
+fragment ALPHA	: 'a'..'z' | 'A'..'Z';
+fragment CHAR	: 'a'..'z' | 'A'..'Z' | '\u0100' .. '\u017E';
+fragment DIGIT	: '0'..'9';
+fragment ANY	: '\u0000' .. '\uFFFE';

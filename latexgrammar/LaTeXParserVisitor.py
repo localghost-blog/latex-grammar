@@ -14,11 +14,6 @@ class LaTeXParserVisitor(ParseTreeVisitor):
         return self.visitChildren(ctx)
 
 
-    # Visit a parse tree produced by LaTeXParser#escape.
-    def visitEscape(self, ctx:LaTeXParser.EscapeContext):
-        return self.visitChildren(ctx)
-
-
     # Visit a parse tree produced by LaTeXParser#verbatim.
     def visitVerbatim(self, ctx:LaTeXParser.VerbatimContext):
         return self.visitChildren(ctx)
@@ -26,11 +21,6 @@ class LaTeXParserVisitor(ParseTreeVisitor):
 
     # Visit a parse tree produced by LaTeXParser#math.
     def visitMath(self, ctx:LaTeXParser.MathContext):
-        return self.visitChildren(ctx)
-
-
-    # Visit a parse tree produced by LaTeXParser#textmacro.
-    def visitTextmacro(self, ctx:LaTeXParser.TextmacroContext):
         return self.visitChildren(ctx)
 
 
